@@ -2,7 +2,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { signOut, useSession } from 'next-auth/react';
+import { signIn, signOut, useSession } from 'next-auth/react';
 
 const Header: React.FC = () => {
   const router = useRouter();
@@ -86,9 +86,9 @@ const Header: React.FC = () => {
   if (!session) {
     right = (
       <div className="right">
-        <Link href="/api/auth/signin">
-          <a data-active={isActive('/signup')}>Log in</a>
-        </Link>
+        {/* <Link href="/api/auth/signin"> */}
+          <a onClick={() => signIn()} type="button" data-active={isActive('/signin')}>Log in</a>
+        {/* </Link> */}
         <style jsx>{`
           a {
             text-decoration: none;

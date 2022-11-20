@@ -1,23 +1,171 @@
 import { NextApiHandler } from "next"
-import { NextAuthHandler } from "next-auth/core"
-import NextAuth from "next-auth";
+import NextAuth, { NextAuthOptions } from "next-auth";
 import { PrismaAdapter } from '@next-auth/prisma-adapter';
 import GithubProvider from 'next-auth/providers/github';
 import prisma from "../../../lib/prisma";
+import CredentialsProvider from "next-auth/providers/credentials";
+import { logger } from "../../../lib/logger";
 
 
 const authHandler: NextApiHandler = (req, res) => NextAuth(req, res, options);
 
 export default authHandler;
 
-const options = {
-    providers: [
-        GithubProvider({
+const options: NextAuthOptions = {
+  secret: process.env.AUTH_SECRET,
+  // debug:true,
+  providers: [
+    CredentialsProvider({
+          id: "credentials",
+          // The name to display on the sign in form (e.g. "Sign in with...")
+          name: "Credentials",
+          // `credentials` is used to generate a form on the sign in page.
+          // You can specify which fields should be submitted, by adding keys to the `credentials` object.
+          // e.g. domain, username, password, 2FA token, etc.
+          // You can pass any HTML attribute to the <input> tag through the object.
+          credentials: {
+            username: { label: "Username", type: "text", placeholder: "username" },
+            password: { label: "Password", type: "password" }
+          },
+      async authorize(credentials, req) {
+            console.log(process.env.NEXTAUTH_URL)
+            // Add logic here to look up the user from the credentials supplied
+            const user = await fetch(`${process.env.NEXTAUTH_URL}/api/users/check-credentials`,{
+                  method: "POST",
+                  headers: {
+                      "Content-Type": "application/x-www-form-urlencoded",
+                      accept: "application/json",
+                  },
+                  body: Object.entries(credentials)
+                      .map((e) => e.join("="))
+                      .join("&"),
+                  },
+              )
+              .then((res) => res.json())
+              .catch((err) => {
+                return null;
+              });
+      
+            if (user) {
+              // Any object returned will be saved in `user` property of the JWT
+              return user
+            } else {
+              // If you return null then an error will be displayed advising the user to check their details.
+              return null
+      
+              // You can also Reject this callback with an Error thus the user will be sent to the error page with the error message as a query parameter
+            }
+          }
+    }),
+    GithubProvider({
             clientId: process.env.GITHUB_ID,
             clientSecret: process.env.GITHUB_SECRET,
-        }),
-    ],
-    adapter: PrismaAdapter(prisma),
-    secret: process.env.SECRET,
+    }),
+        
+  ],
+  adapter: PrismaAdapter(prisma),
+  pages: {
+    signIn: "/auth/signin",
+    signOut: "/auth/signout"
+  },
+  logger: {
+    error: (code, metadata) => {
+      logger.error(code, metadata);
+    },
+    warn: (code) => {
+      logger.warn(code);
+    },
+    debug: (code, metadata) => {
+      logger.debug(code, metadata);
+    }
+  },
+  // // callbacks
+  // callbacks: {
+  //   signIn: async({
+  //     user,
+  //     account,
+  //     profile,
+  //     email,
+  //     // crederntials
+  //   }) => {
+  //     logger.debug(`signIn:user`, user, "\n\n");
+  //     logger.debug(`signIn:account`, account, "\n\n");
+  //     logger.debug(`signIn:profile`, profile, "\n\n");
+  //     return true;
+  //   },
+  //   redirect: async({
+  //     url,
+  //     baseUrl
+  //   }): Promise<any> => {
+
+  //     logger.debug(`url,baseUrl`, url, baseUrl);
+  //     const params = new URLSearchParams(new URL(url).search);
+  //     const callbackUrl = params.get('callbackUrl');
+  //     console.log(callbackUrl);
+  //     if (url.startsWith(baseUrl)) {
+
+  //       if (callbackUrl?.startsWith("/")) {
+  
+  //         logger.debug("redirecting to ", baseUrl + callbackUrl);
+  //         return baseUrl + callbackUrl;
+  
+  //       } else if (callbackUrl?.startsWith(baseUrl)) {
+  
+  //         logger.debug("redirecting to ", callbackUrl);
+  //         return callbackUrl;
+  
+  //       }
+        
+  //     } else {
+  //       logger.debug("redirecting to ", baseUrl);
+  //       return Promise.resolve(baseUrl);
+  //     }
+
+  //     // return Promise.resolve(url.startsWith(baseUrl)? url : baseUrl);
+
+  //   },
+  //   // // Getting JWT token from API Response
+  //   // jwt: async ({ token, user, account, profile, isNewUser }) => {
+  //   //   logger.debug(`jwt:token`, token, "\n\n");
+  //   //   logger.debug(`jwt:user`, user, "\n\n");
+  //   //   logger.debug(`jwt:account`, account, "\n\n");
+  //   //   const isSigningIn = user ? true : false;
+  //   //   if (isSigningIn) {
+  //   //     token.jwt = user.access_token;
+  //   //     token.user = user;
+  //   //   } else {
+  //   //     logger.debug(`jwt:isSignIn: user is not logged in`, "\n\n");
+  //   //   }
+  //   //   logger.debug(`resolving token`, token, "\n\n");
+  //   //   return Promise.resolve(token);
+  //   // },
+  //   // session: async ({ session, token }) => {
+  //   //   logger.debug(`session:session`, session, "\n\n");
+  //   //   logger.debug(`session:token`, token, "\n\n");
+  //   //   session.jwt = token.jwt;
+  //   //   session.user = token.user;
+  //   //   logger.debug(`resolving session`, session, "\n\n");
+  //   //   return Promise.resolve(session);
+  //   // },
+  // },
+  // // session
+  session: {
+    // Choose how you want to save the user session.
+    // The default is `"jwt"`, an encrypted JWT (JWE) in the session cookie.
+    // If you use an `adapter` however, we default it to `"database"` instead.
+    // You can still force a JWT session by explicitly defining `"jwt"`.
+    // When using `"database"`, the session cookie will only contain a `sessionToken` value,
+    // which is used to look up the session in the database.
+    strategy: "jwt",
+
+    // Seconds - How long until an idle session expires and is no longer valid.
+    maxAge: 30 * 24 * 60 * 60, // 30 days
+
+    // Seconds - Throttle how frequently to write to database to extend a session.
+    // Use it to limit write operations. Set to 0 to always update the database.
+    // Note: This option is ignored if using JSON Web Tokens
+    updateAge: 24 * 60 * 60, // 24 hours
+  },    
 }
+
 

@@ -12,6 +12,7 @@ generator client {
 
 model Post {
   id        String  @id @default(cuid())
+  // id        String  @id @default(dbgenerated("nanoid()")) @db.VarChar(4)
   title     String
   content   String?
   published Boolean @default(false)
@@ -54,6 +55,7 @@ model User {
   email         String?   @unique
   emailVerified DateTime?
   image         String?
+  password      String?
   posts         Post[]
   Account       Account[]
   Session       Session[]
